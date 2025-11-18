@@ -1,0 +1,75 @@
+########################################
+# MODEL & CHECKPOINT FILES
+########################################
+
+# Folder model apa pun, di level mana pun
+model/
+models/
+**/model/
+**/models/
+
+# Folder training checkpoints
+checkpoints/
+**/checkpoints/
+
+# File berbobot besar (ML artifacts)
+*.bin
+*.pt
+*.h5
+*.safetensors
+*.onnx
+*.pb
+
+########################################
+# DATASETS
+########################################
+
+data/
+dataset/
+datasets/
+**/data/
+**/dataset/
+**/datasets/
+
+# File dataset umum
+*.csv
+*.jsonl
+*.arrow
+
+########################################
+# PYTHON CACHE
+########################################
+
+__pycache__/
+**/__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.cache/
+*.log
+
+########################################
+# ENVIRONMENTS
+########################################
+
+env/
+venv/
+.venv/
+ENV/
+*.env
+*.env.*
+
+########################################
+# NODE & JS PACKAGES
+########################################
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+########################################
+# OS FILES
+########################################
+
+.DS_Store
+Thumbs.db
