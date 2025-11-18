@@ -4,9 +4,7 @@
 
 # Folder model apa pun, di level mana pun
 model/
-models/
 **/model/
-**/models/
 
 # Folder training checkpoints
 checkpoints/
