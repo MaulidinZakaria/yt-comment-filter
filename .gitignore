@@ -20,17 +20,6 @@ checkpoints/
 *.onnx
 *.pb
 
-########################################
-# DATASETS
-########################################
-
-data/
-dataset/
-datasets/
-**/data/
-**/dataset/
-**/datasets/
-
 # File dataset umum
 *.csv
 *.jsonl
