@@ -5,7 +5,7 @@ export async function getChannelInfo() {
   const token = await getYoutubeToken();
 
   const response = await fetch(
-    "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
+    "https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true",
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -26,6 +26,7 @@ export async function getChannelInfo() {
     channelName: channel.snippet.title,
     channelUsername: channel.snippet.customUrl ?? "",
     thumbnail: channel.snippet.thumbnails?.default?.url ?? "",
+    uploadsPlaylistId: channel.contentDetails.relatedPlaylists.uploads,
     connected: true,
   };
 
@@ -37,26 +38,29 @@ export async function getChannelInfo() {
 }
 
 export async function getOwnerVideos(token: string): Promise<YoutubeVideo[]> {
-  const channelResponse = await fetch(
-    "https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true",
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  );
+  const cache = await chrome.storage.local.get([
+    "ownerVideos",
+    "ownerVideosUpdatedAt",
+  ]);
 
-  if (!channelResponse.ok) {
-    throw new Error("Failed to fetch channel");
+  const cacheVideos = cache.ownerVideos as YoutubeVideo[] | undefined;
+
+  const updatedAt: any = cache.ownerVideosUpdatedAt;
+
+  if (cacheVideos && updatedAt && Date.now() - updatedAt < 5 * 60 * 1000) {
+    return cacheVideos;
   }
 
-  const channelData = await channelResponse.json();
+  const storage = (await chrome.storage.local.get("youtubeChannel")) as {
+    youtubeChannel?: {
+      uploadsPlaylistId?: string;
+    };
+  };
 
-  const uploadsPlaylistId =
-    channelData.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+  const uploadsPlaylistId = storage.youtubeChannel?.uploadsPlaylistId;
 
   if (!uploadsPlaylistId) {
-    throw new Error("Uploads playlist not found");
+    throw new Error("No uploadsPlaylistId in cache");
   }
 
   const allPlaylistItems: any[] = [];
@@ -117,7 +121,7 @@ export async function getOwnerVideos(token: string): Promise<YoutubeVideo[]> {
     }
   }
 
-  return allPlaylistItems
+  const videos = allPlaylistItems
     .filter((item) => {
       const videoId = item.contentDetails.videoId;
 
@@ -139,6 +143,13 @@ export async function getOwnerVideos(token: string): Promise<YoutubeVideo[]> {
       (a, b) =>
         new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
     );
+
+  await chrome.storage.local.set({
+    ownerVideos: videos,
+    ownerVideosUpdatedAt: Date.now(),
+  });
+
+  return videos;
 }
 
 export async function getAllComments(videoId: string, token: string) {
@@ -147,6 +158,7 @@ export async function getAllComments(videoId: string, token: string) {
   const comments: {
     commentId: string;
     authorName: string;
+    channelId: string;
     commentText: string;
     publishedAt: string;
   }[] = [];
@@ -187,6 +199,7 @@ export async function getAllComments(videoId: string, token: string) {
       comments.push({
         commentId: topComment.id,
         authorName: topComment.snippet.authorDisplayName,
+        channelId: topComment.snippet.channelId,
         commentText: topComment.snippet.textOriginal,
         publishedAt: topComment.snippet.publishedAt,
       });
@@ -197,6 +210,7 @@ export async function getAllComments(videoId: string, token: string) {
         comments.push({
           commentId: reply.id,
           authorName: reply.snippet.authorDisplayName,
+          channelId: reply.snippet.channelId,
           commentText: reply.snippet.textOriginal,
           publishedAt: reply.snippet.publishedAt,
         });
@@ -207,46 +221,6 @@ export async function getAllComments(videoId: string, token: string) {
   } while (nextPageToken);
 
   return comments;
-}
-
-export async function deleteComments(commentIds: string[], token: string) {
-  const results = [];
-
-  for (const commentId of commentIds) {
-    try {
-      const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/comments?id=${commentId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      // console.log("DELETE", commentId, response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-
-        console.error("DELETE ERROR", response.status, errorText);
-        throw new Error(`Failed (${response.status})`);
-      }
-
-      results.push({
-        commentId,
-        success: true,
-      });
-    } catch (error: any) {
-      results.push({
-        commentId,
-        success: false,
-        error: error.message,
-      });
-    }
-  }
-
-  return results;
 }
 
 export async function rejectComments(commentIds: string[], token: string) {

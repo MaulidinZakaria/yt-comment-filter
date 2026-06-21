@@ -20,6 +20,7 @@ export interface PredictionResponse {
 
 export interface ScanResult {
   commentId: string;
+  channelId: string;
   authorName: string;
   commentText: string;
   score: number;

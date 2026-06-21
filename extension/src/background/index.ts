@@ -6,6 +6,8 @@ import {
   rejectComments,
 } from "./youtube-api";
 import { logoutYoutube } from "./youtube-auth";
+import { YoutubeVideo } from "@/types";
+import { sendFalsePositive } from "@/content/services/feedback-service";
 
 const STORAGE_KEYS = {
   judolCount: "judolCount",
@@ -249,8 +251,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const comments = await getAllComments(message.videoId, token as string);
 
         if (comments.length === 0) {
-          await chrome.storage.session.set({
-            scanData: {
+          await chrome.storage.local.set({
+            scanResults: {
               videoId: message.videoId,
               results: [],
               scannedAt: Date.now(),
@@ -267,8 +269,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
         const results = await predictCommentsOwner(comments);
 
-        await chrome.storage.session.set({
-          scanData: {
+        await chrome.storage.local.set({
+          scanResults: {
             videoId: message.videoId,
             results,
             scannedAt: Date.now(),
@@ -294,9 +296,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.action === "getScanResults") {
     (async () => {
-      const data = await chrome.storage.session.get("scanData");
+      const data = await chrome.storage.local.get("scanResults");
 
-      sendResponse(data.scanData ?? null);
+      sendResponse(data.scanResults ?? null);
     })();
 
     return true;
@@ -319,6 +321,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           token as string,
         );
 
+        const { scanResults } = (await chrome.storage.local.get(
+          "scanResults",
+        )) as {
+          scanResults?: {
+            videoId?: string;
+            results: Array<any>;
+            scannedAt?: number;
+          };
+        };
+
+        const deletedCommentIds = results
+          .filter((r) => r.success)
+          .map((r) => r.commentId);
+
+        const updatedResults = (scanResults?.results ?? []).filter(
+          (item: any) => !deletedCommentIds.includes(item.commentId),
+        );
+
+        await chrome.storage.local.set({
+          scanResults: {
+            ...(scanResults ?? {}),
+            results: updatedResults,
+          },
+        });
+
         sendResponse({
           success: true,
           results,
@@ -330,6 +357,100 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         });
       }
     })();
+
+    return true;
+  }
+
+  /**
+   * False Positive
+   */
+
+  if (message.action === "markAsSafe") {
+    (async () => {
+      try {
+        const { scanResults, youtubeChannel, ownerVideos } =
+          (await chrome.storage.local.get([
+            "scanResults",
+            "youtubeChannel",
+            "ownerVideos",
+          ])) as {
+            scanResults?: {
+              videoId?: string;
+              results?: Array<any>;
+              scannedAt?: number;
+            };
+            youtubeChannel?: {
+              channelId?: string;
+              channelName?: string;
+            };
+            ownerVideos?: YoutubeVideo[];
+          };
+
+        const commentIds: string[] = message.commentIds ?? [];
+
+        if (commentIds.length === 0) {
+          sendResponse({
+            success: false,
+            error: "No comments selected",
+          });
+          return;
+        }
+
+        const selectedResults = (scanResults?.results ?? []).filter(
+          (item: any) => commentIds.includes(item.commentId),
+        );
+
+        const videoId = scanResults?.videoId;
+        const videoTitle =
+          ownerVideos?.find((v) => v.videoId === videoId)?.title ?? "";
+
+        const payload = {
+          comments: selectedResults.map((item: any) => ({
+            commentId: item.commentId,
+            commentText: item.commentText,
+            originalPrediction: item.prediction,
+            correctedLabel: "normal",
+            videoId: videoId,
+            videoTitle: videoTitle,
+            channelId: youtubeChannel?.channelId ?? "",
+            channelName: youtubeChannel?.channelName ?? "",
+          })),
+        };
+
+        await sendFalsePositive(payload);
+
+        const updatedResults = (scanResults?.results ?? []).map((item: any) => {
+          if (commentIds.includes(item.commentId)) {
+            return {
+              ...item,
+              prediction: "normal",
+              feedback: "false_positive",
+              corrected: true,
+            };
+          }
+
+          return item;
+        });
+
+        await chrome.storage.local.set({
+          scanResults: {
+            ...(scanResults ?? {}),
+            results: updatedResults,
+          },
+        });
+
+        sendResponse({
+          success: true,
+          results: updatedResults,
+        });
+      } catch (error: any) {
+        sendResponse({
+          success: false,
+          error: error.message,
+        });
+      }
+    })();
+
     return true;
   }
 });

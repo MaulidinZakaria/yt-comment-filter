@@ -24,6 +24,7 @@ export async function predictCommentsOwner(
   comments: {
     commentId: string;
     authorName: string;
+    channelId: string;
     commentText: string;
     publishedAt: string;
   }[],

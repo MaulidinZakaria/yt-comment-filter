@@ -15,6 +15,7 @@ import { exportJudolCsv } from "@/utils/export-csv";
 import { YoutubeVideo } from "@/types";
 import { BadgeCheck, CircleUser, Download, Info, SearchAlert, ShieldCheck, Trash } from "lucide-vue-next";
 import BaseSpinner from "@/components/BaseSpinner.vue";
+import { useCommentCorrection } from "@/composables/useCommentCorrection";
 
 /**
  * COMPOSABLES
@@ -46,6 +47,11 @@ const {
   loading: deleteLoading,
 } = useCommentDelete();
 
+const {
+  loading: markAsSafeLoading,
+  markAsSafe,
+} = useCommentCorrection()
+
 /**
  * STATE
  */
@@ -74,7 +80,7 @@ watch(
     if (!videos.value.length) return;
 
     const data =
-      await chrome.storage.session.get([
+      await chrome.storage.local.get([
         "selectedVideoId",
         "selectedVideoTitle",
       ]) as {
@@ -172,6 +178,13 @@ const stats = computed(() => [
   },
 ]);
 
+const globalLoading = computed(() =>
+  scanLoading.value ||
+  markAsSafeLoading.value ||
+  deleteLoading.value === 'deleteSelected' ||
+  deleteLoading.value === 'deleteAll',
+);
+
 /**
  * VIDEO
  */
@@ -184,7 +197,7 @@ const handleSelectedVideo = async (
   selectedVideoTitle.value =
     video.title;
 
-  await chrome.storage.session.set({
+  await chrome.storage.local.set({
     selectedVideoId: video.videoId,
     selectedVideoTitle: video.title
   });
@@ -214,89 +227,100 @@ const handleExportCsv = () => {
  * SELECTION
  */
 const toggleSelectAll = () => {
+  const judolIds = judolResults.value.map(
+    (item) => item.commentId,
+  );
+
   const allSelected =
     selectedCommentIds.value.length ===
-    judolResults.value.length;
+    judolIds.length &&
+    judolIds.every((id) =>
+      selectedCommentIds.value.includes(id),
+    );
 
   if (allSelected) {
     selectedCommentIds.value = [];
     return;
   }
 
-  selectedCommentIds.value =
-    judolResults.value.map(
-      (item) => item.commentId,
-    );
+  selectedCommentIds.value = [...judolIds];
 };
 
-/**
- * DELETE
- */
-const handleDeleteSelected =
-  async () => {
-    const count =
-      selectedCommentIds.value.length;
+const handleDeleteSelected = async () => {
+  const count =
+    selectedCommentIds.value.length;
 
-    const confirmed = confirm(
-      `Hapus ${count} komentar?`,
-    );
+  if (count === 0) return;
 
-    if (!confirmed) {
-      return;
-    }
+  const confirmed = confirm(
+    `Hapus ${count} komentar?`,
+  );
 
-    const result =
-      await deleteComments(
-        selectedCommentIds.value,
-        "deleteSelected",
-      );
+  if (!confirmed) return;
 
-    if (!result.success) {
-      return;
-    }
+  const result = await deleteComments(
+    selectedCommentIds.value,
+    "deleteSelected",
+  );
 
-    results.value = results.value.filter(
-      (item) =>
-        !selectedCommentIds.value.includes(
-          item.commentId,
-        ),
-    );
+  if (!result.success) return;
 
-    selectedCommentIds.value = [];
-  };
+  await loadPreviousScan(
+    selectedVideoId.value,
+  );
 
-const handleDeleteAll =
-  async () => {
-    const commentIds =
-      judolResults.value.map(
-        (item) => item.commentId,
-      );
+  selectedCommentIds.value = [];
+};
 
-    const confirmed = confirm(
-      `Hapus ${commentIds.length} komentar judol?`,
-    );
+const handleDeleteAll = async () => {
+  const commentIds = judolResults.value.map(
+    (item) => item.commentId,
+  );
 
-    if (!confirmed) {
-      return;
-    }
+  const confirmed = confirm(
+    `Hapus ${commentIds.length} komentar judol?`,
+  );
 
-    const result =
-      await deleteComments(
-        commentIds,
-        "deleteAll",
-      );
+  if (!confirmed) return;
 
-    if (!result.success) {
-      return;
-    }
+  const result = await deleteComments(
+    commentIds,
+    "deleteAll",
+  );
 
-    results.value = results.value.filter(
-      (item) =>
-        item.prediction !== "judol",
-    );
+  if (!result.success) return;
 
-    selectedCommentIds.value = [];
-  };
+  await loadPreviousScan(
+    selectedVideoId.value,
+  );
+
+  selectedCommentIds.value = [];
+};
+
+const handleMarkAsSafe = async () => {
+  const count =
+    selectedCommentIds.value.length;
+
+  if (count === 0) return;
+
+  const confirmed = confirm(
+    `Tandai ${count} komentar sebagai aman?`,
+  );
+
+  if (!confirmed) return;
+
+  const result = await markAsSafe(
+    selectedCommentIds.value,
+  );
+
+  if (!result.success) return;
+
+  await loadPreviousScan(
+    selectedVideoId.value,
+  );
+
+  selectedCommentIds.value = [];
+};
 </script>
 
 <template>
@@ -318,8 +342,8 @@ const handleDeleteAll =
         <p class="text-base font-medium">Belum Terhubung</p>
         <p class="text-center text-(--foreground)/80">Otorisasi akun YouTube Anda untuk mulai memindai komentar.</p>
       </div>
-      <button @click="connectYoutube" :disabled="loading !== null"
-        class="w-full flex justify-center items-center gap-2 p-3 bg-primary text-on-primary rounded-lg shadow-sm hover:bg-primary/80 hover:shadow-md transition-colors duration-200">
+      <button @click="connectYoutube" :disabled="loading === 'connect'"
+        class="w-full flex justify-center items-center gap-2 p-3 bg-primary text-on-primary rounded-lg shadow-sm hover:bg-primary/80 hover:shadow-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed!">
         <ShieldCheck v-if="loading !== 'connect'" :size="20" />
         <BaseSpinner v-else class="size-5" />
         <p class="text-sm font-semibold">
@@ -378,20 +402,21 @@ const handleDeleteAll =
         <p class="text-xs font-semibold">Hapus Semua Judol</p>
       </button>
     </div>
-    <CommentResultTable :scan-loading="scanLoading" :has-scanned="hasScanned" :judol-results="judolResults"
+    <CommentResultTable :scan-loading="globalLoading" :has-scanned="hasScanned" :judol-results="judolResults"
       :selected-comment-ids="selectedCommentIds" @update:selectedCommentIds="
         selectedCommentIds = $event
         " @toggleSelectAll="toggleSelectAll" />
     <div class="w-full flex gap-3 justify-center items-center">
-      <button @click="handleDeleteSelected" :disabled="judolResults.length === 0 || selectedCommentIds.length === 0"
+      <button @click="handleDeleteSelected"
+        :disabled="judolResults.length === 0 || selectedCommentIds.length === 0 || deleteLoading === 'deleteSelected'"
         class="flex-1 w-full flex justify-center items-center gap-2 py-3 px-2 bg-(--danger) text-on-primary rounded-lg shadow-lg hover:bg-(--danger)/80 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed!">
         <BaseSpinner v-if="deleteLoading === 'deleteSelected'" class="size-4" />
         <Trash v-else :size="18" />
         <p class="text-xs font-semibold">Hapus Terpilih ({{ selectedCommentIds.length }})</p>
       </button>
-      <button @click="handleDeleteSelected" :disabled="judolResults.length === 0 || selectedCommentIds.length === 0"
+      <button @click="handleMarkAsSafe" :disabled="judolResults.length === 0 || selectedCommentIds.length === 0"
         class="flex-1 w-full flex justify-center items-center gap-2 py-3 px-2 bg-primary text-on-primary rounded-lg shadow-lg hover:bg-primary/80 transition-colors duration-180 disabled:opacity-50 disabled:cursor-not-allowed!">
-        <BaseSpinner v-if="deleteLoading === 'deleteSelected'" class="size-4" />
+        <BaseSpinner v-if="markAsSafeLoading" class="size-4" />
         <BadgeCheck v-else :size="18" />
         <p class="text-xs font-semibold">Tandai Aman ({{ selectedCommentIds.length }})</p>
       </button>
