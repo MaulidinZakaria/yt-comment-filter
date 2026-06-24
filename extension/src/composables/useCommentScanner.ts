@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { ScanResult } from "@/types";
+import { toast } from "@/shared/toast";
 
 export function useCommentScanner() {
   const loading = ref(false);
@@ -32,18 +33,33 @@ export function useCommentScanner() {
       });
 
       if (!response?.success) {
-        console.error("[SCAN FAILED]", response?.error);
+        toast({
+          title: "Gagal",
+          message: response?.error ?? "Tidak dapat memindai komentar",
+          type: "error",
+        });
 
         return;
       }
 
       results.value = response.results;
-
       hasScanned.value = true;
+
+      toast({
+        title: "Berhasil",
+        message: `${response.results.length} komentar berhasil dipindai`,
+        type: "success",
+      });
 
       return response;
     } catch (error) {
       console.error("[SCAN EXCEPTION]", error);
+
+      toast({
+        title: "Gagal",
+        message: "Terjadi kesalahan saat memindai komentar",
+        type: "error",
+      });
     } finally {
       loading.value = false;
     }

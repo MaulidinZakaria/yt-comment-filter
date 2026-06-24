@@ -1,3 +1,4 @@
+import { toast } from "@/shared/toast";
 import { YoutubeChannel } from "@/types";
 import { ref } from "vue";
 
@@ -23,7 +24,25 @@ export function useYoutubeChannel() {
 
       if (result.success) {
         channel.value = result.channel;
+
+        toast({
+          title: "Berhasil",
+          message: "Channel YouTube berhasil terhubung",
+          type: "success",
+        });
+      } else {
+        toast({
+          title: "Gagal",
+          message: result.error ?? "Tidak dapat menghubungkan akun YouTube",
+          type: "error",
+        });
       }
+    } catch (error) {
+      toast({
+        title: "Gagal",
+        message: "Terjadi kesalahan saat menghubungkan akun",
+        type: "error",
+      });
     } finally {
       loading.value = null;
     }
@@ -39,7 +58,19 @@ export function useYoutubeChannel() {
 
       if (result.success) {
         channel.value = null;
+      } else {
+        toast({
+          title: "Gagal",
+          message: result.error ?? "Tidak dapat keluar dari akun",
+          type: "error",
+        });
       }
+    } catch (error) {
+      toast({
+        title: "Gagal",
+        message: "Terjadi kesalahan saat logout",
+        type: "error",
+      });
     } finally {
       loading.value = null;
     }

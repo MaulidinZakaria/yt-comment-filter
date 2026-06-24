@@ -9,6 +9,8 @@ import OwnerPage from "@/pages/OwnerPage.vue";
 
 import { useRole } from "@/composables/useRole";
 import { Role } from "@/types";
+import ConfirmModal from "@/components/ConfirmModal.vue";
+import Toast from "@/components/Toast.vue";
 
 const {
   role,
@@ -24,6 +26,8 @@ const handleSelectRole = async (role: Role) => {
 </script>
 
 <template>
+  <Toast />
+  <ConfirmModal />
   <Navbar :role @select-role="handleSelectRole" />
 
   <Transition name="page" mode="out-in">

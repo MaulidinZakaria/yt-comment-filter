@@ -16,6 +16,8 @@ import { YoutubeVideo } from "@/types";
 import { BadgeCheck, CircleUser, Download, Info, SearchAlert, ShieldCheck, Trash } from "lucide-vue-next";
 import BaseSpinner from "@/components/BaseSpinner.vue";
 import { useCommentCorrection } from "@/composables/useCommentCorrection";
+import { toast } from "@/shared/toast";
+import { confirm } from "@/shared/confirm";
 
 /**
  * COMPOSABLES
@@ -156,7 +158,7 @@ const stats = computed(() => [
     label: "Total",
     value: results.value.length,
     subtitle: "Terdeteksi",
-    color: "primary",
+    colorClass: "text-primary",
     bgClass: "bg-primary/10",
     borderClass: "border-primary/20",
   },
@@ -164,7 +166,7 @@ const stats = computed(() => [
     label: "Normal",
     value: normalCount.value,
     subtitle: "Aman",
-    color: "(--success)",
+    colorClass: "text-(--success)",
     bgClass: "bg-(--success)/10",
     borderClass: "border-(--success)/20",
   },
@@ -172,7 +174,7 @@ const stats = computed(() => [
     label: "Judol",
     value: judolCount.value,
     subtitle: "Indikasi",
-    color: "(--danger)",
+    colorClass: "text-(--danger)",
     bgClass: "bg-(--danger)/10",
     borderClass: "border-(--danger)/20",
   },
@@ -217,10 +219,27 @@ const handleScan = async () => {
  * EXPORT
  */
 const handleExportCsv = () => {
-  exportJudolCsv(
-    results.value,
-    selectedVideoTitle.value,
-  );
+  try {
+    exportJudolCsv(
+      results.value,
+      selectedVideoTitle.value,
+    );
+
+    toast({
+      title: "Berhasil",
+      message: "Data berhasil diexport ke CSV",
+      type: "success",
+    });
+  } catch (error) {
+    toast({
+      title: "Gagal",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Tidak dapat membuat file CSV",
+      type: "error",
+    });
+  }
 };
 
 /**
@@ -246,15 +265,23 @@ const toggleSelectAll = () => {
   selectedCommentIds.value = [...judolIds];
 };
 
+/**
+ * DELETE
+ */
+
 const handleDeleteSelected = async () => {
   const count =
     selectedCommentIds.value.length;
 
   if (count === 0) return;
 
-  const confirmed = confirm(
-    `Hapus ${count} komentar?`,
-  );
+  const confirmed = await confirm({
+    title: "Hapus Komentar",
+    message: `Yakin ingin menghapus ${count} komentar?`,
+    confirmText: "Hapus",
+    cancelText: "Batal",
+    type: "error"
+  });
 
   if (!confirmed) return;
 
@@ -263,7 +290,20 @@ const handleDeleteSelected = async () => {
     "deleteSelected",
   );
 
-  if (!result.success) return;
+  if (!result.success) {
+    toast({
+      title: "Gagal",
+      message: "Terjadi kesalahan saat menghapus komentar",
+      type: "error",
+    });
+    return;
+  }
+
+  toast({
+    title: "Berhasil",
+    message: `${count} komentar berhasil dihapus`,
+    type: "success",
+  });
 
   await loadPreviousScan(
     selectedVideoId.value,
@@ -277,9 +317,13 @@ const handleDeleteAll = async () => {
     (item) => item.commentId,
   );
 
-  const confirmed = confirm(
-    `Hapus ${commentIds.length} komentar judol?`,
-  );
+  const confirmed = await confirm({
+    title: "Hapus Semua Komentar",
+    message: `Yakin ingin menghapus ${commentIds.length} komentar yang terdeteksi?`,
+    confirmText: "Hapus",
+    cancelText: "Batal",
+    type: "error"
+  });
 
   if (!confirmed) return;
 
@@ -288,7 +332,20 @@ const handleDeleteAll = async () => {
     "deleteAll",
   );
 
-  if (!result.success) return;
+  if (!result.success) {
+    toast({
+      title: "Gagal",
+      message: "Terjadi kesalahan saat menghapus komentar",
+      type: "error",
+    });
+    return;
+  }
+
+  toast({
+    title: "Berhasil",
+    message: `${commentIds.length} komentar berhasil dihapus`,
+    type: "success",
+  });
 
   await loadPreviousScan(
     selectedVideoId.value,
@@ -303,9 +360,13 @@ const handleMarkAsSafe = async () => {
 
   if (count === 0) return;
 
-  const confirmed = confirm(
-    `Tandai ${count} komentar sebagai aman?`,
-  );
+  const confirmed = await confirm({
+    title: "Tandai Komentar Aman",
+    message: `Yakin ingin menandai ${count} komentar sebagai aman?`,
+    confirmText: "Tandai Aman",
+    cancelText: "Batal",
+    type: "info"
+  });
 
   if (!confirmed) return;
 
@@ -313,7 +374,20 @@ const handleMarkAsSafe = async () => {
     selectedCommentIds.value,
   );
 
-  if (!result.success) return;
+  if (!result.success) {
+    toast({
+      title: "Gagal",
+      message: "Terjadi kesalahan saat menandai aman komentar",
+      type: "error",
+    });
+    return;
+  }
+
+  toast({
+    title: "Berhasil",
+    message: `${count} komentar berhasil ditandai aman`,
+    type: "success",
+  });
 
   await loadPreviousScan(
     selectedVideoId.value,
