@@ -17,9 +17,26 @@ export function useVideoMetadata() {
     }
   };
 
+  const startMetadataListener = () => {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "local") return;
+
+      const newVal = changes.currentVideoMetadata?.newValue as
+        | VideoMetadata
+        | undefined;
+
+      if (!newVal) return;
+
+      video.value = newVal;
+
+      loading.value = !newVal.channelName;
+    });
+  };
+
   return {
     video,
     loading,
     loadVideoMetadata,
+    startMetadataListener,
   };
 }

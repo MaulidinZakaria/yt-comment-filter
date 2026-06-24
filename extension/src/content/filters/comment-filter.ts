@@ -5,6 +5,7 @@ import {
   currentIsEnabled,
   isProcessing,
   setProcessing,
+  getCache,
 } from "../state";
 
 import { getAllCommentTextNodes } from "../dom/comment-dom";
@@ -66,18 +67,14 @@ export function scanAndQueue(
 
   clearCommentStyles();
 
+  const cache = getCache();
   const comments = getAllCommentTextNodes();
 
   for (const comment of comments) {
     const id = getCommentIdFromElement(comment);
 
     if (predictionCache.has(id)) {
-      applyCommentFilter(
-        comment,
-        predictionCache.get(id) ?? false,
-        role,
-        filterMode,
-      );
+      applyCommentFilter(comment, cache.get(id) ?? false, role, filterMode);
     } else {
       queuePrediction(comment);
     }

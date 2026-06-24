@@ -8,6 +8,8 @@ import { useVideoMetadata } from '@/composables/useVideoMetadata';
 const {
   video,
   loadVideoMetadata,
+  startMetadataListener,
+  loading: channelLoading
 } = useVideoMetadata();
 
 const filterMode = ref<
@@ -17,10 +19,14 @@ const filterMode = ref<
 const isEnabled = ref<boolean>(true);
 const { judolCount, scannedCount, loading } = useCommentStats();
 
-onMounted(async () => {
-  await loadVideoMetadata();
 
-  const settings = await getSettings();
+onMounted(async () => {
+  startMetadataListener();
+
+  const [_, settings] = await Promise.all([
+    loadVideoMetadata(),
+    getSettings(),
+  ]);
 
   filterMode.value = settings.filterMode;
   isEnabled.value = settings.isEnabled;
@@ -88,25 +94,37 @@ const donutStyle = computed(() => ({
       class="flex flex-col justify-center items-center w-full p-4 bg-(--surface) shadow-md rounded-lg border border-(--outline) gap-4">
       <div class="w-full flex items-center justify-between border-b border-(--outline) gap-4 pb-4">
         <div class="w-20 h-12 rounded-sm shrink-0 flex items-center justify-center bg-(--surface-container)">
-          <img v-if="video?.videoId" :src="video.thumbnail" class="w-full h-full rounded-sm object-cover" />
-          <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FF0000" class="w-14">
+          <svg v-if="!video?.videoId" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FF0000"
+            class="w-14">
             <path
               d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.4 31.4 0 0 0 0 12a31.4 31.4 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.4 31.4 0 0 0 24 12a31.4 31.4 0 0 0-.5-5.8zM9.6 15.5v-7L16 12l-6.4 3.5z" />
           </svg>
+          <div v-else-if="channelLoading" class="w-full h-full animate-pulse bg-gray-300/40 rounded-sm"></div>
+          <img v-else :src="video.thumbnail" class="w-full h-full rounded-sm object-cover" />
         </div>
-
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-(--foreground) truncate">
-            {{ video?.videoId ? video.title : "Tidak ada video aktif" }}
-          </p>
+          <template v-if="!video?.videoId">
+            <p class="text-sm font-medium text-(--foreground)">
+              Tidak ada video aktif
+            </p>
 
-          <p class="text-xs text-(--foreground)/70" :class="{ truncate: video?.videoId }">
-            {{
-              video?.videoId
-                ? video.channelName
-                : "Buka halaman video YouTube untuk melihat informasi video"
-            }}
-          </p>
+            <p class="text-xs text-(--foreground)/70">
+              Buka halaman video YouTube untuk melihat informasi video
+            </p>
+          </template>
+          <template v-else-if="channelLoading">
+            <span class="block h-4 w-3/4 bg-gray-300/40 rounded animate-pulse"></span>
+            <span class="block h-3 w-1/2 mt-2 bg-gray-300/30 rounded animate-pulse"></span>
+          </template>
+          <template v-else>
+            <p class="text-sm font-medium text-(--foreground) truncate">
+              {{ video.title }}
+            </p>
+
+            <p class="text-xs text-(--foreground)/70 truncate">
+              {{ video.channelName }}
+            </p>
+          </template>
         </div>
       </div>
       <div class="flex items-center justify-between w-full gap-4">
@@ -117,7 +135,6 @@ const donutStyle = computed(() => ({
               <span class="relative flex size-3">
                 <span
                   class="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/70 opacity-75 [animation-duration:1.5s]"></span>
-
                 <span class="relative inline-flex size-3 rounded-full bg-primary"></span>
               </span>
 

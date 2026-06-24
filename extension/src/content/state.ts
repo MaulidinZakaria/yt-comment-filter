@@ -62,4 +62,20 @@ export function setBatchTimer(timer: number | null) {
   batchTimer = timer;
 }
 
+export function resetCommentUI() {
+  document.querySelectorAll("[data-label]").forEach((el) => {
+    el.removeAttribute("data-label");
+    el.classList.remove("judol", "normal");
+  });
+}
 
+/* =========================
+ * Cache
+ * ========================= */
+export function getCache() {
+  return predictionCache;
+}
+
+export function clearPredictionCache() {
+  predictionCache.clear();
+}

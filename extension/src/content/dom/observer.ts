@@ -1,4 +1,9 @@
-import { currentIsEnabled, isUpdating } from "../state";
+import {
+  clearPredictionCache,
+  currentIsEnabled,
+  isUpdating,
+  resetCommentUI,
+} from "../state";
 
 import { scanAndQueue } from "../filters/comment-filter";
 
@@ -14,35 +19,18 @@ function scheduleStableScan() {
 }
 
 export function initializeObserver() {
-  const waitForComments = window.setInterval(() => {
-    const commentsContainer = document.querySelector("#comments");
+  const waitForComments = setInterval(() => {
+    const commentsContainer = document.querySelector("ytd-comments, #comments");
 
     if (!commentsContainer) return;
 
     clearInterval(waitForComments);
 
-    const observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver(() => {
       if (!currentIsEnabled) return;
       if (isUpdating) return;
 
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (!(node instanceof Element)) {
-            continue;
-          }
-
-          const isCommentNode =
-            node.matches("ytd-comment-renderer") ||
-            node.matches("ytd-comment-thread-renderer") ||
-            node.querySelector("ytd-comment-renderer") ||
-            node.querySelector("ytd-comment-thread-renderer");
-
-          if (isCommentNode) {
-            scheduleStableScan();
-            return;
-          }
-        }
-      }
+      scheduleStableScan();
     });
 
     observer.observe(commentsContainer, {
@@ -50,20 +38,54 @@ export function initializeObserver() {
       subtree: true,
     });
 
-    // console.log("[Comment Filter] Observer initialized");
-  }, 500);
+    // 🔥 SORT CHANGE HOOK (INI YANG SUDAH BENAR)
+    initializeSortObserver(() => {
+      console.log("[SORT CHANGE DETECTED]");
 
-  initializeSortMenuObserver();
+      clearPredictionCache();
+      resetCommentUI(); // clear label lama
+      scheduleStableScan(); // rescan semua
+    });
+  }, 500);
 }
 
-function initializeSortMenuObserver() {
-  const sortMenu =
-    document.querySelector("ytd-comments-header-renderer") ||
-    document.querySelector("ytd-sort-filter-sub-menu-renderer");
+function getSortMode(): string {
+  return (
+    document.querySelector("tp-yt-paper-button#label")?.textContent?.trim() ??
+    ""
+  );
+}
 
-  if (!sortMenu) return;
+export function initializeSortObserver(onChange: () => void) {
+  const wait = setInterval(() => {
+    const container =
+      document.querySelector("ytd-comments-header-renderer") ||
+      document.querySelector("#sort-menu") ||
+      document.body;
 
-  sortMenu.addEventListener("click", () => {
-    scheduleStableScan();
-  });
+    if (!container) return;
+
+    clearInterval(wait);
+
+    let lastSort = getSortMode();
+
+    const observer = new MutationObserver(() => {
+      const currentSort = getSortMode();
+
+      if (!currentSort) return;
+
+      if (currentSort !== lastSort) {
+        lastSort = currentSort;
+
+        console.log("[SORT CHANGE]", currentSort);
+
+        onChange();
+      }
+    });
+
+    observer.observe(container, {
+      subtree: true,
+      childList: true,
+    });
+  }, 500);
 }
